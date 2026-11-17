@@ -1,6 +1,6 @@
 {
-  "name": "Purrsuade",
-  "short_name": "Purrsuade",
+  "name": "Purrsuade (test)",
+  "short_name": "Test Purrsuade",
   "description": "Daily speaking practice with a pixel cat to look after.",
   "start_url": "./",
   "display": "standalone",

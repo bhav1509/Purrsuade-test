@@ -193,7 +193,7 @@ async function askClaude({ topic, transcript, spokeSec, targetMin }, claimed, ex
       model: COACH_MODEL,
       max_tokens: 8000,
       ...(COACH_EFFORT ? { output_config: { effort: COACH_EFFORT } } : {}),
-      messages: [{ role: 'user', content: coachPrompt({ topic, transcript, spokeSec: +spokeSec || 0, targetMin: +targetMin || 2 }) }],
+      messages: [{ role: 'user', content: coachPrompt({ topic, transcript, spokeSec: +spokeSec || 0, targetMin: Math.min(5, Math.max(1, +targetMin || 2)) }) }],
     });
   } catch (e) {
     await Promise.all(claimed.map(release));

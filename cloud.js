@@ -1,14 +1,20 @@
 // ---- Cloud (optional): sign in, back up / sync progress, and instant AI feedback ----
-// The Purrsuade backend on AWS (see cloud/README.md). With these empty the app works as before, fully on this device,
-// and feedback is through the user's own AI app only.
-const CLOUD_CONFIG={
+// The Purrsuade backend on AWS (see cloud/README.md): the live one, or the test copy for the test site and localhost
+// (TEST_SITE, env.js). With these empty the app works as before, fully on this device, and feedback is through the
+// user's own AI app only.
+const CLOUD_CONFIG=TEST_SITE?{
+  api:'https://i7luof6vxj4m4ow5gzhl7aijqi0dehdc.lambda-url.ap-southeast-2.on.aws/',
+  authDomain:'https://purrsuade-test.auth.ap-southeast-2.amazoncognito.com',
+  clientId:'2c8rnma80jrefchf6ukmog25nl',
+  google:false,
+}:{
   api:'https://b656y245il3odhhf4l3fntwneu0emqws.lambda-url.ap-southeast-2.on.aws/',
   authDomain:'https://ap-southeast-2k4xfr0rzy.auth.ap-southeast-2.amazoncognito.com',
   clientId:'4o27mfs0rl36t8lhjkomsr593j',
   google:true,
 };
 const cloudOn=()=>!!(CLOUD_CONFIG.api&&CLOUD_CONFIG.authDomain&&CLOUD_CONFIG.clientId);
-const AUTH_KEY='purrsuade-auth',PKCE_KEY='purrsuade-pkce',SYNC_KEY='purrsuade-sync';
+const AUTH_KEY=storeKey('purrsuade-auth'),PKCE_KEY=storeKey('purrsuade-pkce'),SYNC_KEY=storeKey('purrsuade-sync');
 // Earlier versions could keep the user's own Anthropic API key on the device; that option is gone, so forget any.
 try{localStorage.removeItem('purrsuade-anthropic-key');}catch{}
 // Settings that belong to this device (speech model, crash guard…) stay out of the synced copy.
@@ -132,16 +138,16 @@ addEventListener('online',()=>{if(signedIn()&&syncMeta().dirty)cloudPush();});
 
 // ---- Usage events: which steps people reach, under a random ID for this device (no name, email or account, and
 // never what anyone says). Sent in small batches to POST /events; see the privacy policy. ----
-const DEVICE_KEY='purrsuade-device';let newDevice=false;
+const DEVICE_KEY=storeKey('purrsuade-device');let newDevice=false;
 const deviceId=()=>{try{let d=localStorage.getItem(DEVICE_KEY);if(!d){d=b64url(crypto.getRandomValues(new Uint8Array(12)));localStorage.setItem(DEVICE_KEY,d);newDevice=true;}return d;}catch{return 'none';}};
 // Settings → Privacy can turn it off (kept on this device).
-const NO_USAGE_KEY='purrsuade-no-usage';
+const NO_USAGE_KEY=storeKey('purrsuade-no-usage');
 const shareUsage=()=>{try{return !localStorage.getItem(NO_USAGE_KEY);}catch{return false;}};
 function setShareUsage(on){try{if(on)localStorage.removeItem(NO_USAGE_KEY);else{localStorage.setItem(NO_USAGE_KEY,'1');evQueue=[];}}catch{}}
 let evQueue=[],evTimer=null;
 function track(name,detail){
-  // Test runs on this computer (localhost) aren't counted.
-  if(!cloudOn()||!shareUsage()||location.hostname==='localhost')return;
+  // Test runs on this computer (localhost or any other plain-http address) aren't counted.
+  if(!cloudOn()||!shareUsage()||location.protocol!=='https:')return;
   evQueue.push({n:name,t:Date.now(),...(detail!=null?{d:String(detail).slice(0,300)}:{})});
   clearTimeout(evTimer);evTimer=setTimeout(flushEvents,2000);
 }
@@ -156,7 +162,7 @@ addEventListener('pagehide',flushEvents);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)flushEvents();});
 
 // ---- Instant AI feedback: through your account (a few free a day), or one free try on this device first ----
-const FREE_TRY_KEY='purrsuade-free-try-used';
+const FREE_TRY_KEY=storeKey('purrsuade-free-try-used');
 const freeTryUsed=()=>{try{return !!localStorage.getItem(FREE_TRY_KEY);}catch{return true;}};
 const useFreeTry=()=>{try{localStorage.setItem(FREE_TRY_KEY,new Date().toISOString());}catch{}};
 // 'account' (signed in), 'guest' (the free try, not used yet) or '' (sign in, or copy-paste with your own AI app).
@@ -164,7 +170,7 @@ const instantMode=()=>signedIn()?'account':cloudOn()&&!freeTryUsed()?'guest':'';
 let coachLeft=null;
 async function refreshCoachLeft(){if(!signedIn())return;try{const d=await api('/usage');if(d.remaining!==coachLeft){coachLeft=d.remaining;if(panel==='quest')render();}}catch{}}
 async function instantFeedback(){
-  const talk={topic:challenge.topic,transcript:challenge.transcript,spokeSec:challenge.spokeSec||0,targetMin:state.duration};
+  const talk={topic:challenge.topic,transcript:challenge.transcript,spokeSec:challenge.spokeSec||0,targetMin:targetMin()};
   if(instantMode()==='guest'){
     const r=await fetch(CLOUD_CONFIG.api.replace(/\/$/,'')+'/coach',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(talk)});
     const d=await r.json().catch(()=>({}));

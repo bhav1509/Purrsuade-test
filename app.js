@@ -1,10 +1,10 @@
 // Semantic version (MAJOR.MINOR.PATCH), bumped by scripts/release.sh on every push; 1.0.0 is the public launch.
-const APP_VERSION='1.1.0';
+const APP_VERSION='1.1.0-test.11171336';
 const APP_RELEASED='2026-11-03';
 // Where the Feedback button sends people (a prefilled GitHub issue; swap for a form or mailto: link).
 const FEEDBACK_URL='https://github.com/bhav1509/Purrsuade/issues/new';
-// Storage keys keep the original name so existing progress carries over after the rename.
-const STORE='communication-quest-week1-v1';
+// Storage keys keep the original name so existing progress carries over after the rename (storeKey: env.js).
+const STORE=storeKey('communication-quest-week1-v1');
 const $=s=>document.querySelector(s);
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
 const round1=n=>Math.round(n*10)/10;
@@ -75,7 +75,7 @@ function rolloverQuest(){
   if(challenge.date===today())return false;
   const kept=questHasData(challenge);
   if(kept){const {step,date,...rest}=challenge;
-    state.history.unshift({...rest,scores:{...rest.scores},id:Date.now(),date,isDaily:!!challenge.daily,incomplete:true,earnedXP:0,earnedCoins:0,duration:state.duration,prep:prep()});
+    state.history.unshift({...rest,scores:{...rest.scores},id:Date.now(),date,isDaily:!!challenge.daily,incomplete:true,earnedXP:0,earnedCoins:0,duration:challenge.target??state.duration,prep:prep()});
     state.history.sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);save();}
   challenge=null;saveQuest();return kept?'saved':'dropped';
 }
@@ -124,6 +124,9 @@ function level(){return Math.floor(state.xp/500)+1;}
 const TITLES=[[1,'Curious Speaker'],[3,'Clear Speaker'],[5,'Confident Communicator'],[7,'Persuasive Speaker'],[9,'Communication Champion']];
 function title(){const l=level();return TITLES.filter(([n])=>l>=n).pop()[1];}
 function prep(){const l=level();return l<=2?60:l<=4?45:30;}
+// Talk length in minutes: the quest in progress keeps the length it started with (the first talk is a 1-minute warm-up).
+const targetMin=()=>challenge?.target??state.duration;
+const durLabel=m=>m<1?`${Math.round(m*60)} sec`:`${m} min`;
 // Finished sessions only; quests left half-done at midnight sit in the journal as incomplete.
 function sessions(){return state.history.filter(h=>!h.incomplete);}
 function averageOverall(){const a=sessions().map(h=>+h.scores.overall).filter(Boolean);return a.length?round1(a.reduce((x,y)=>x+y,0)/a.length):0;}
@@ -285,13 +288,15 @@ function questPanel(){
     <canvas id="wheel-canvas" width="288" height="288" aria-hidden="true"></canvas>
     <p class="wheel-label" id="wheel-label" style="--tier:${tier[1]}">${wheel.spinning||wheel.landed?tier[0]:'Spin for a topic'}</p>
     <button class="primary" id="spin" ${wheel.spinning?'disabled':''}>${wheel.spinning?'Spinning…':daily?'Spin a practice topic':'Spin for today’s topic'}</button>
-    <p class="muted">Topics: ${WHEEL_TIERS.slice(Math.max(0,difficulty()-3),difficulty()).map(t=>t[0]).join(' · ')}<br>${prep()} sec to plan · ${state.duration} min to speak</p></div>`;}
+    <p class="muted">${state.history.length?`Topics: ${wheelTopics()}<br>${prep()} sec to plan · ${durLabel(state.duration)} to speak`:`Your first talk is a short warm-up:<br>${prep()} sec to plan · 1 min to speak`}</p></div>`;}
   const st=Math.min(challenge.step||0,QUEST_STEPS.length-1);
   return `<div class="challenge"><div class="steps">${QUEST_STEPS.map((l,i)=>`<button data-step="${i}" class="${i===st?'active':''}${i<st?' done':''}"><b>${i+1}</b>${l}</button>`).join('')}</div>
   <div class="step-body">${[stepTopic,stepSpeak,stepCoach][Math.min(st,2)]()}</div>
   <div class="step-foot">${st?`<button class="secondary" data-step="${st-1}">← Back</button>`:''}${st===0?`<button class="primary" id="go-speak">I’m ready · start speaking →</button>`:st===1?`<button class="primary" data-step="2" ${recActive()||rec.whisper||rec.phase==='mic'?'disabled':''}>Get feedback →</button>`:'<button class="primary" id="complete">Complete quest ✨</button>'}</div></div>`;
 }
-function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · DIFFICULTY ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${state.duration} min target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${state.duration} minutes. Transcribe it for the next step.</p>`;}
+// What's on the wheel: the unlocked categories.
+const wheelTopics=()=>WHEEL_TIERS.slice(Math.max(0,difficulty()-3),difficulty()).map(t=>t[0]).join(' · ');
+function stepTopic(){const tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="topic-box" style="--tier:${tier[1]}"><span>${tier[0].toUpperCase()} · DIFFICULTY ${challenge.difficulty}/7</span><h3>${challenge.topic}</h3><div class="chips"><b><i class="px-icon brain" aria-hidden="true"></i>${prep()}s prep</b><b><i class="px-icon mic light" aria-hidden="true"></i>${durLabel(targetMin())} target</b></div></div>${!challenge.rerolled?'<button class="secondary" id="reroll">↻ Use free reroll</button>':''}<p class="muted">Take ${prep()} seconds to prepare, then speak for about ${durLabel(targetMin())}. Transcribe it for the next step.</p>`;}
 // Big countdown digits drawn as pixels (the font's "1" has a flag that reads like a stray line).
 const DIGITS=['.###.|#...#|#..##|#.#.#|##..#|#...#|.###.','..#..|.##..|..#..|..#..|..#..|..#..|.###.','.###.|#...#|....#|...#.|..#..|.#...|#####','####.|....#|....#|.###.|....#|....#|####.','...#.|..##.|.#.#.|#..#.|#####|...#.|...#.','#####|#....|####.|....#|....#|#...#|.###.','.###.|#....|#....|####.|#...#|#...#|.###.','#####|....#|...#.|..#..|.#...|.#...|.#...','.###.|#...#|#...#|.###.|#...#|#...#|.###.','.###.|#...#|#...#|.####|....#|....#|.###.'].map(d=>d.split('|'));
 DIGITS[1]=['..#..','..#..','..#..','..#..','..#..','..#..','..#..'];DIGITS[0]=['.###.','#...#','#...#','#...#','#...#','#...#','.###.'];
@@ -430,7 +435,7 @@ function showLive(){const el=$('#live-text');if(!el)return;el.innerHTML=`${esc(r
 function pausePrep(){if(rec.phase!=='prep')return;if(rec.paused){rec.prepEnd=Date.now()+rec.left;rec.paused=false;}else{rec.left=Math.max(0,rec.prepEnd-Date.now());rec.paused=true;}render();}
 function tickRecorder(){
   if(rec.phase==='prep'){if(rec.paused)return;const left=Math.ceil((rec.prepEnd-Date.now())/1000);if(left<=0){beginRecording();return;}const el=$('#prep-count');if(el&&el.dataset.n!=String(left)){el.dataset.n=left;el.innerHTML=pixelNumber(left);}}
-  else if(rec.phase==='rec'){const s=recSeconds(),target=state.duration*60;
+  else if(rec.phase==='rec'){const s=recSeconds(),target=targetMin()*60;
     let v=0;if(rec.an){rec.an.getFloatTimeDomainData(rec.lvl);let sum=0;for(const x of rec.lvl)sum+=x*x;const rms=Math.sqrt(sum/rec.lvl.length);v=Math.min(1,rms*6);
       // When the voice was first and last heard, so the silence before and after the talk doesn't count as speaking.
       if(rms>.02){rec.voiceFirst??=s;rec.voiceLast=s;}}else v=rec.hearing?.6+Math.random()*.3:0;
@@ -464,7 +469,7 @@ function stopRecording(){
 }
 function cancelSpeaking(){keepAwake(false);try{rec.pcm&&(rec.pcm.proc.disconnect(),rec.pcm.mute.disconnect());}catch{}markWhisper(null);try{rec.src?.disconnect();}catch{}try{rec.sr&&(rec.sr.onend=null,rec.sr.abort());}catch{}try{rec.mr?.state!=='inactive'&&rec.mr?.stop();}catch{}rec.stream?.getTracks().forEach(t=>t.stop());resetRecorder();render();}
 function stepSpeak(){
-  const target=state.duration*60;
+  const target=targetMin()*60;
   if(rec.phase==='mic')return `<div class="speak-stage"><i class="px-icon mic light big" aria-hidden="true"></i><h3>Getting the microphone ready…</h3><p class="speak-topic">${esc(challenge.topic)}</p><p class="muted small">If your browser asks, allow the microphone. Planning starts right after.</p></div>`;
   if(rec.phase==='prep'){const left=Math.max(1,Math.ceil(((rec.paused?rec.left:rec.prepEnd-Date.now()))/1000)),tier=WHEEL_TIERS[challenge.difficulty-1];return `<div class="speak-stage${rec.paused?' paused':''}">
     <span class="eyebrow">${rec.paused?'PAUSED':'PLAN YOUR TALK'}</span><b class="big-count" id="prep-count" data-n="${left}" aria-label="${left} seconds">${pixelNumber(left)}</b>
@@ -485,14 +490,14 @@ function stepSpeak(){
     <button class="secondary" id="rec-again" ${w?'disabled':''}>↻ Record again</button>`;}
   return `<div class="speak-stage">
     <i class="px-icon mic light big" aria-hidden="true"></i><h3>Ready to speak?</h3>
-    <ul class="speak-points"><li><b>Plan</b>${prep()} seconds</li><li><b>Talk</b>about ${state.duration} min</li>
+    <ul class="speak-points"><li><b>Plan</b>${prep()} seconds</li><li><b>Talk</b>about ${durLabel(targetMin())}</li>
       <li><b>Words</b>${dictating()?'type with your keyboard’s mic':useWhisper()||SpeechRec?'written out for you':'typed in afterwards'}</li></ul>
     <button class="primary" id="rec-start">Start</button></div>`;
 }
 
 // ---- High-accuracy transcript: Whisper in a background worker, on this device ----
 let whisperWorker=null,whisperSeq=0;const whisperJobs={};
-const WHISPER_FLAG='purrsuade-whisper-running';
+const WHISPER_FLAG=storeKey('purrsuade-whisper-running'),ISSUE_KEY=storeKey('purrsuade-last-issue');
 // Crash guard marker: {t, stage, visible}. "visible" turns false while the app is in the background, so a page
 // that iOS unloads there (very common when switching apps) isn't mistaken for a crash.
 function markWhisper(stage){try{if(stage)localStorage.setItem(WHISPER_FLAG,JSON.stringify({t:Date.now(),stage,visible:!document.hidden}));else localStorage.removeItem(WHISPER_FLAG);}catch{}}
@@ -500,7 +505,7 @@ function readWhisperMark(){try{const v=localStorage.getItem(WHISPER_FLAG);if(!v)
 function markVisibility(){const m=readWhisperMark();if(m){m.visible=!document.hidden;try{localStorage.setItem(WHISPER_FLAG,JSON.stringify(m));}catch{}}}
 addEventListener('pagehide',()=>{const m=readWhisperMark();if(m){m.visible=false;try{localStorage.setItem(WHISPER_FLAG,JSON.stringify(m));}catch{}}});
 // Last thing that went wrong while writing out words, included with Send feedback.
-function noteWhisperIssue(what){try{localStorage.setItem('purrsuade-last-issue',`${new Date().toISOString()} ${what}`);}catch{}}
+function noteWhisperIssue(what){try{localStorage.setItem(ISSUE_KEY,`${new Date().toISOString()} ${what}`);}catch{}}
 function whisperCall(type,data={},onEvent){
   whisperWorker??=new Worker('whisper-worker.js',{type:'module'});
   whisperWorker.onmessage=e=>{const m=e.data,job=m.id!=null?whisperJobs[m.id]:null;
@@ -534,11 +539,29 @@ function paceOf(transcript='',sec=0){
   const words=transcript.trim().split(/\s+/).filter(Boolean).length;if(!sec||!words)return null;
   const wpm=Math.round(words/(sec/60));return {words,sec,wpm,label:PACE_BANDS.find(([max])=>wpm<max)[1],short:sec<20||words<40};
 }
-function coachPrompt(){
-  const p=paceOf(challenge.transcript,challenge.spokeSec),target=state.duration;
-  const timing=p?`SPEAKING TIME: ${mmss(p.sec)} (target: about ${target} min)\nPACE: ${p.wpm} words per minute (${p.words} words), which counts as "${p.label.toLowerCase()}" (comfortable is 130–160)${p.short?'. The talk was very short, so the pace is only a rough guide':''}.\nThe app measured these. Use these exact numbers and this pace verdict; don't recalculate them.`
-    :`TARGET LENGTH: about ${target} min (the actual time wasn't recorded, so don't comment on pace)`;
-  return `You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.\n\nScore each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.\n\nThen give these six sections, each starting with its heading on its own line, written exactly like this:\n## Strengths\nThree specific strengths, as "- " bullet points.\n## Improvements\nThree specific improvements, as "- " bullet points.\n## Timing and pace\nDid my length suit the target? Was the pace given below comfortable to listen to? One or two "- " bullet points.\n## A stronger structure\nThe structure I could have used, as short "- " bullet points.\n## Example answer\nA short improved example answer, as one paragraph.\n## Next focus\nOne focus for my next speaking session, in one sentence.\n\nNo title, no tables and no list of scores before the sections. Do not overpraise me. Be encouraging, concrete and concise.\n\nFinish your reply with these two sections as plain text (no headings, bold or other formatting), exactly in this format:\nKEY POINTS:\n- 3 to 5 bullet points, each under 15 words: the most important takeaways\nSCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X\n\nTOPIC:\n${challenge.topic}\n\n${timing}\n\nTRANSCRIPT:\n${challenge.transcript}`;}
+// The coach prompt. The same function is in app.js (the prompt copied into ChatGPT / Claude) and in
+// cloud/src/coach-prompt.mjs (instant feedback); keep the two identical: scripts/check-prompt.mjs compares them.
+function buildCoachPrompt({topic,transcript,spokeSec,targetMin}){
+  const p=paceOf(transcript,spokeSec);
+  const timing=p?[`SPEAKING TIME: ${mmss(p.sec)} (target: about ${targetMin} min)`,
+    `PACE: ${p.wpm} words per minute (${p.words} words), which counts as "${p.label.toLowerCase()}" (comfortable is 130–160)${p.short?'. The talk was very short, so the pace is only a rough guide':''}.`,
+    'The app measured these. Use these exact numbers and this pace verdict; don’t recalculate them.'].join('\n')
+    :`TARGET LENGTH: about ${targetMin} min (the actual time wasn’t recorded, so don’t comment on pace)`;
+  return ['You are my friendly but honest communication mentor. I am practicing speaking, not writing. The transcript below was captured by speech recognition, so ignore small transcription errors.',
+    '','Score each from 1–10: Clarity, Structure, Confidence, Vocabulary, Conciseness, Grammar, Overall.',
+    '','Then give these six sections, each starting with its heading on its own line, written exactly like this:',
+    '## Strengths','Three specific strengths, as "- " bullet points.',
+    '## Improvements','Three specific improvements, as "- " bullet points.',
+    '## Timing and pace','Did my length suit the target? Was the pace given below comfortable to listen to? One or two "- " bullet points.',
+    '## A stronger structure','The structure I could have used, as short "- " bullet points.',
+    '## Example answer','A short improved example answer, as one paragraph.',
+    '## Next focus','One focus for my next speaking session, in one sentence.',
+    '','No title, no tables and no list of scores before the sections. Do not overpraise me. Be encouraging, concrete and concise.',
+    '','Finish your reply with these two sections as plain text (no headings, bold or other formatting), exactly in this format:',
+    'KEY POINTS:','- 3 to 5 bullet points, each under 15 words: the most important takeaways',
+    'SCORES: clarity=X; structure=X; confidence=X; vocabulary=X; conciseness=X; grammar=X; overall=X','','TOPIC:',topic,'',timing,'','TRANSCRIPT:',transcript].join('\n');
+}
+function coachPrompt(){return buildCoachPrompt({topic:challenge.topic,transcript:challenge.transcript,spokeSec:challenge.spokeSec||0,targetMin:targetMin()});}
 // Reads scores from the reply: the SCORES line if present, otherwise lines like "Clarity: 7", "Clarity 7/10" or "| Clarity | 7/10 |".
 function parseScores(text){
   const out={},line=[...text.matchAll(/SCORES:[*\s]*?([^\n]*\d[^\n]*)/gi)].pop()?.[1];
@@ -580,13 +603,13 @@ async function getInstantFeedback(){
 function paceCard(transcript,sec,target){
   const p=paceOf(transcript,sec);if(!p)return '';const at=v=>clamp((v-60)/160*100,0,100);
   return `<div class="pace-card${p.label==='Comfortable'?' ok':''}"><div class="pace-num">${pixelNumber(p.wpm)}<span>words a minute</span></div>
-    <div class="pace-info"><b>${p.label} pace</b><span>${mmss(p.sec)} spoken${target?` · target ${target} min`:''} · ${p.words} words</span>
+    <div class="pace-info"><b>${p.label} pace</b><span>${mmss(p.sec)} spoken${target?` · target ${durLabel(target)}`:''} · ${p.words} words</span>
       <div class="pace-gauge" aria-hidden="true"><i class="zone" style="left:${at(130)}%;width:${at(161)-at(130)}%"></i><i class="mark" style="left:${at(p.wpm)}%"></i></div>
       <span class="pace-scale"><em>Slow</em><em>130–160</em><em>Fast</em></span>${p.short?'<small>A very short talk, so this is a rough guide.</small>':''}</div></div>`;
 }
 // Once the instant feedback is in: the pace and the key points, so there's something to read before finishing.
 function feedbackPreview(){const kp=challenge.keyPoints?.length?challenge.keyPoints:parseKeyPoints(challenge.feedback);
-  return `${paceCard(challenge.transcript,challenge.spokeSec,state.duration)}${kp.length?`<div class="result-kp"><b>Key points</b><ul>${kp.map(k=>`<li>${esc(k)}</li>`).join('')}</ul></div>`:''}`;}
+  return `${paceCard(challenge.transcript,challenge.spokeSec,targetMin())}${kp.length?`<div class="result-kp"><b>Key points</b><ul>${kp.map(k=>`<li>${esc(k)}</li>`).join('')}</ul></div>`:''}`;}
 let manualOpen=false;
 function stepCoach(){
   const fav=state.coachApp,apps=fav?[...AI_APPS.filter(a=>a[0]===fav),...AI_APPS.filter(a=>a[0]!==fav)]:AI_APPS,got=!!challenge.feedback.trim(),instant=!!instantMode();
@@ -679,7 +702,8 @@ function startChallenge(p,rerolled){
   wheel={rot:wheel.rot,spinning:false};resetRecorder();
   // Planning starts straight away (with the quest open); a topic revealed while it was closed waits on its card.
   const now=panel==='quest';
-  challenge={topic:p.t,difficulty:p.d,rerolled,date:today(),daily:state.lastDaily!==today(),transcript:'',feedback:'',scores:{clarity:0,structure:0,confidence:0,vocabulary:0,conciseness:0,grammar:0,overall:0},self:{confidence:5,fluency:5,satisfaction:5},step:now?1:0};
+  // The very first talk is a 1-minute warm-up.
+  challenge={topic:p.t,difficulty:p.d,target:state.history.length?state.duration:1,rerolled,date:today(),daily:state.lastDaily!==today(),transcript:'',feedback:'',scores:{clarity:0,structure:0,confidence:0,vocabulary:0,conciseness:0,grammar:0,overall:0},self:{confidence:5,fluency:5,satisfaction:5},step:now?1:0};
   if(now)startSpeaking();else render();
 }
 
@@ -689,7 +713,7 @@ function skillRow(key,v){return `<div class="skill-meter ${key}" title="${LABEL[
 function progressPanel(){return `<div class="progress-view">
   <div class="tiles"><div><b>${state.streak}</b><small>day streak</small></div><div><b>${sessions().length}</b><small>sessions</small></div><div><b>${averageOverall()||'—'}</b><small>avg score</small></div><div><b>${difficulty()}/7</b><small>difficulty</small></div></div>
   <section class="p-card"><div class="section-head"><h3>Level ${level()} · ${title()}</h3><span class="pill">${state.xp%500}/500 XP</span></div><div class="bar xp"><i style="width:${(state.xp%500)/5}%"></i></div></section>
-  <section class="p-card"><div class="section-head"><h3>Speaking target</h3><span class="pill">${state.duration} min</span></div><p class="muted small">Three recent scores averaging 7.5+ add 30 seconds (up to 5 min); below 5.5 eases it down (never under 2 min).</p></section>
+  <section class="p-card"><div class="section-head"><h3>Speaking target</h3><span class="pill">${durLabel(state.duration)}</span></div><p class="muted small">Three recent scores averaging 7.5+ add 30 seconds (up to 5 min); below 5.5 eases it down (never under 2 min).</p></section>
   <section class="p-card grow"><h3>Skill profile</h3><div class="skill-list">${SKILLS.map(s=>skillRow(s,skillAvg(s))).join('')}</div></section></div>`;}
 
 // ---- Journal ----
@@ -705,7 +729,7 @@ function journalPanel(){
   return `${cal}<div class="hist-list"><div class="hist-rows">${rows.map(h=>`<button class="hist-row" data-hist="${h.id}"><span><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><b>${esc(h.topic)}</b></span><span class="score${h.incomplete||!h.scores.overall?' inc':''}">${h.incomplete||!h.scores.overall?'—':h.scores.overall}</span></button>`).join('')}</div>
   <div class="pager"><button class="secondary" data-hist-page="-1" ${histPage?'':'disabled'}>←</button><span>${histPage+1} / ${pages}</span><button class="secondary" data-hist-page="1" ${histPage<pages-1?'':'disabled'}>→</button></div></div>`;
 }
-function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):h.duration+' min'}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${paceCard(h.transcript,h.spokeSec,h.duration)}${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
+function histDetail(h){return `<div class="hist-detail"><div class="detail-head"><button class="mini back" data-hist-back>← All sessions</button><span class="eyebrow">${h.date} · ${h.isDaily?'DAILY':'PRACTICE'}${h.incomplete?' · INCOMPLETE':''}</span><h3>${esc(h.topic)}</h3><div class="chips"><b>🎯 ${h.scores.overall||'—'}/10</b><b>⭐ +${h.earnedXP} XP</b><b>${COIN}+${h.earnedCoins}</b><b><i class="px-icon mic light" aria-hidden="true"></i>${h.spokeSec?mmss(h.spokeSec):durLabel(h.duration)}</b></div><div class="score-chips">${SKILLS.map(s=>`<span>${LABEL[s]} <b>${h.scores[s]||'—'}</b></span>`).join('')}</div></div>${paceCard(h.transcript,h.spokeSec,h.duration)}${(()=>{const kp=h.keyPoints?.length?h.keyPoints:parseKeyPoints(h.feedback);
     return kp.length?`<div class="detail-text key-points"><h4>Key points</h4><ul>${kp.map(p=>`<li>${esc(p)}</li>`).join('')}</ul><details><summary>Full AI feedback</summary><div class="fb">${feedbackHtml(h.feedback)}</div></details></div>`
       :`<div class="detail-text"><h4>AI feedback</h4>${h.feedback?`<div class="fb">${feedbackHtml(h.feedback)}</div>`:'<p class="pre">No feedback saved.</p>'}</div>`;})()}<div class="detail-text"><h4>Transcript</h4><p class="pre">${esc(h.transcript||'No transcript saved.')}</p></div></div>`;}
 // This month at a glance: days with a completed daily quest are filled in.
@@ -1016,7 +1040,7 @@ function bindPanel(){
   q('#install-app')?.addEventListener('click',async()=>{if(!installPrompt)return;installPrompt.prompt();await installPrompt.userChoice.catch(()=>{});installPrompt=null;render();});
   q('#replay-tour')?.addEventListener('click',()=>startTour());
   q('#send-feedback')?.addEventListener('click',()=>{
-    let issue='';try{issue=localStorage.getItem('purrsuade-last-issue')||'';}catch{}
+    let issue='';try{issue=localStorage.getItem(ISSUE_KEY)||'';}catch{}
     const info=`\n\n---\nPurrsuade v${APP_VERSION} · ${isPhone()?'phone':'computer'} · transcription: ${transcriber()}${issue?` · last issue: ${issue}`:''} · ${navigator.userAgent}`;
     const url=FEEDBACK_URL.startsWith('mailto:')?`${FEEDBACK_URL}?subject=${encodeURIComponent('Purrsuade feedback')}&body=${encodeURIComponent('What happened / what would you like?'+info)}`
       :FEEDBACK_URL.includes('github.com')?`${FEEDBACK_URL}?title=${encodeURIComponent('Feedback: ')}&body=${encodeURIComponent('What happened / what would you like?'+info)}`:FEEDBACK_URL;
@@ -1040,12 +1064,23 @@ function flagField(step,selector,msg){
   const clear=()=>{box.classList.remove('invalid');box.querySelector('.field-msg')?.remove();el.removeEventListener('pointerdown',clear);el.removeEventListener('input',clear);};
   el.addEventListener('pointerdown',clear);el.addEventListener('input',clear);setTimeout(clear,3500);
 }
-function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();cloudSyncSoon();showResult(entry,lvBefore,topBefore);
+function completeQuest(skipFeedback){if(!challenge.transcript.trim()){rec={phase:'done'};flagField(1,'#transcript','Add your transcript');return;}if(!skipFeedback&&!challenge.scores.overall){flagField(2,'[data-score="overall"]','Add Overall');return;}const lvBefore=level(),topBefore=difficulty(),daily=state.lastDaily!==today();let xp=daily?100:35;xp+=(skipFeedback?10:25+10)+(challenge.feedback.trim()?25:0)+(!challenge.rerolled?15:0)+(challenge.scores.overall>=8?20:0);let coins=daily?60:20;if(challenge.scores.overall>=8)coins+=10;if(daily)state.streak=state.lastDaily===yesterday()?state.streak+1:1;resetRecorder();const {step,daily:_daily,...done}=challenge;if(skipFeedback)done.noFeedback=true;const entry={...done,id:Date.now(),date:today(),isDaily:daily,earnedXP:xp,earnedCoins:coins,duration:challenge.target??state.duration,prep:prep()};state.history.unshift(entry);state.xp+=xp;state.coins+=coins;if(daily)state.lastDaily=today();state.duration=nextDuration();challenge=null;panel=null;catReaction={type:'cheer',started:performance.now()};persist();cloudSyncSoon();showResult(entry,lvBefore,topBefore);
   track('quest_done',skipFeedback?'no feedback':'feedback');
-  // After the first finished quest on this device, one short survey (once), when the result card closes.
-  if(!localStorage.getItem(SURVEY_KEY))document.querySelector('.result-shade [data-close]')?.addEventListener('click',()=>setTimeout(showSurvey,500));}
+  // When the result card closes after the first finished quest: the three tips (new players skip the tour at the
+  // start), then the one short survey.
+  const survey=()=>{if(!localStorage.getItem(SURVEY_KEY))setTimeout(showSurvey,500);};
+  if(!state.tourDone||!localStorage.getItem(SURVEY_KEY))document.querySelector('.result-shade [data-close]')?.addEventListener('click',()=>setTimeout(()=>state.tourDone?survey():startTour(survey),300));}
+// ---- First visit: name the cat, then straight to the wheel (the tips come after the first quest) ----
+function showWelcome(){
+  showModal(`<h3>Welcome to Purrsuade 🐱</h3><p class="muted small">Practise speaking on the spot, a little every day. Your cat eats when you talk.</p>
+    <label class="modal-field">Name your cat<input id="welcome-name" maxlength="18" value="${esc(state.cat.name)}"></label>
+    <div class="modal-foot"><button class="modal-ok" data-yes>Start my first talk</button></div>`,sh=>{
+      sh.querySelector('[data-yes]').onclick=()=>{
+        const name=sh.querySelector('#welcome-name').value.trim().slice(0,18);if(name)state.cat.name=name;
+        state.welcomed=true;closeModal();persist();setPanel('quest');};});
+}
 // ---- One short survey after the first finished quest: how useful, would you pay, what would make it better ----
-const SURVEY_KEY='purrsuade-survey-1';
+const SURVEY_KEY=storeKey('purrsuade-survey-1');
 function showSurvey(){
   try{localStorage.setItem(SURVEY_KEY,'shown');}catch{}track('survey_shown');
   const pick={useful:'',pay:''},opts=(k,list)=>`<div class="survey-opts" data-q="${k}">${list.map(([v,l])=>`<button class="secondary" data-v="${v}">${l}</button>`).join('')}</div>`;
@@ -1071,28 +1106,21 @@ const visible=el=>el&&el.offsetParent!==null&&getComputedStyle(el).visibility!==
 // The Care button, plus its menu when open (the menu pops up outside the button's own box).
 function careArea(){const m=$('.care-menu');if(!m)return null;const rs=[m,m.open&&m.querySelector('.care-menu-list')].filter(Boolean).map(e=>e.getBoundingClientRect()).filter(r=>r.width);
   if(!rs.length)return null;const l=Math.min(...rs.map(r=>r.left)),t=Math.min(...rs.map(r=>r.top)),R=Math.max(...rs.map(r=>r.right)),B=Math.max(...rs.map(r=>r.bottom));return {left:l,top:t,width:R-l,height:B-t};}
+// Three tips after the first quest (new players go straight to the wheel; the tour used to come first).
 const TOUR=[
-  {title:'Meet your cat!',body:()=>`This little one lives in your room. Speak every day to earn coins and keep them happy.<label class="tour-name">Name your cat<input id="tour-cat-name" maxlength="18" value="${esc(state.cat.name)}"></label>`,next:'Let’s go'},
   {target:()=>{const cv=$('#room-canvas'),c=cv?._cat;if(!c)return null;const rc=cv.getBoundingClientRect(),k=rc.width/cv.width;return {left:rc.left+c.x*k,top:rc.top+c.y*k,width:c.w*k,height:c.h*k};},
-    title:'Say hi',body:()=>`Tap ${esc(state.cat.name)} to pet them.`,wait:'pet'},
-  {target:()=>$('.room-hud'),when:()=>!visible($('.needs-toggle')),title:'Needs',body:()=>`Food, water, litter and fun. They drop slowly over time, so check in each day.`},
-  {target:()=>$('.needs-toggle'),when:()=>visible($('.needs-toggle')),title:'Needs',body:()=>`Tap <b>Needs</b> to see ${esc(state.cat.name)}’s food, water, litter and fun.`,wait:'needs',
-    after:{target:()=>$('.room-hud'),body:()=>`These bars are ${esc(state.cat.name)}’s needs. They drop slowly over time, so check in every day.`}},
-  {target:()=>$('.hearts'),title:'Health',body:()=>`Hearts show overall health. Keep the needs up and the hearts stay full.`},
-  {target:()=>$('.coins'),title:'Coins',body:()=>`You earn coins by speaking, and spend them on food, toys and treats.`},
-  {target:careArea,title:'Look after them',body:()=>`Open <b>Care</b> and give ${esc(state.cat.name)} some water. It’s free!`,wait:'care',
-    after:{target:careArea,body:()=>`Nice! Water and litter are free. Food, play and treats cost coins, which you earn by speaking.`}},
-  {target:()=>$('.cam-arrange'),title:'Make it yours',body:()=>`Tap here any time to move the furniture around the room. The cart next to it is the shop: furniture, toys, room styles and coats.`},
-  {target:()=>$('.hud-menu'),title:'Menu',body:()=>`Your quests, progress, journal and settings live here.`},
-  {target:()=>$('.speak-btn'),title:'Your first quest',body:()=>`Ready? Tap <b>Speak</b> to spin a topic and practise for a couple of minutes.`,wait:'quest'},
+    title:()=>`Say hi to ${esc(state.cat.name)}`,body:()=>`Tap ${esc(state.cat.name)} to pet them. Tap the furniture and they’ll go and use it.`,wait:'pet'},
+  {target:careArea,title:()=>'Needs and care',body:()=>`Food, water, litter and fun drop a little every hour. Open <b>Care</b> to look after ${esc(state.cat.name)}. Water and litter are free; food and toys cost coins, which you earn by speaking.`},
+  {target:()=>$('.speak-btn'),title:()=>'Come back tomorrow',body:()=>`One talk a day keeps ${esc(state.cat.name)} happy and builds your streak. The daily quest earns the most XP and coins.`,next:'Got it'},
 ];
 let tour=null;
-function startTour(){
+// `then` runs when the tour ends (finished or skipped).
+function startTour(then){
   // Start from a clean room: close the panel, any dialog, arrange mode and the Needs / Care dropdowns.
   closeModal();if(panel)setPanel(null);endArrange();careMenuOpen=false;if(statsOpen)setStatsOpen(false);render();
   document.querySelectorAll('.tour-shade,.tour-card').forEach(e=>e.remove());
   const shade=document.createElement('div'),card=document.createElement('div');shade.className='tour-shade';card.className='tour-card';card.setAttribute('role','dialog');
-  document.body.append(shade,card);tour={i:-1,shade,card,frame:0};tourGo(1);
+  document.body.append(shade,card);tour={i:-1,shade,card,frame:0,then};tourGo(1);
   const follow=()=>{if(!tour)return;placeTour();tour.frame=requestAnimationFrame(follow);};follow();
 }
 function tourGo(dir){
@@ -1106,7 +1134,7 @@ function tourGo(dir){
 function drawTourCard(){
   const st=TOUR[tour.i],n=TOUR.filter(x=>!x.when||x.when()).length,pos=TOUR.slice(0,tour.i+1).filter(x=>!x.when||x.when()).length,waiting=st.wait&&!tour.done;
   tour.card.className='tour-card'+(waiting?' waiting':'')+(st.target?'':' center');
-  tour.card.innerHTML=`<h3>${st.title}${tour.done?' ✓':''}</h3><p>${tour.done&&st.after?st.after.body():st.body()}</p><div class="tour-foot"><span class="tour-dots">${pos} / ${n}</span><button class="tour-skip" data-tour="skip">Skip tour</button>${waiting?'<button class="tour-later" data-tour="next">Skip step</button>':`<button class="tour-next" data-tour="next">${st.next||'Next'}</button>`}</div>`;
+  tour.card.innerHTML=`<h3>${st.title()}${tour.done?' ✓':''}</h3><p>${tour.done&&st.after?st.after.body():st.body()}</p><div class="tour-foot"><span class="tour-dots">${pos} / ${n}</span><button class="tour-skip" data-tour="skip">Skip tour</button>${waiting?'<button class="tour-later" data-tour="next">Skip step</button>':`<button class="tour-next" data-tour="next">${st.next||'Next'}</button>`}</div>`;
   tour.card.querySelector('[data-tour="skip"]').onclick=()=>endTour(false);
   tour.card.querySelector('[data-tour="next"]').onclick=()=>{
     const nm=$('#tour-cat-name');if(nm&&nm.value.trim()){state.cat.name=nm.value.trim().slice(0,18);persist();}
@@ -1126,8 +1154,8 @@ function placeTour(){
 function tourEvent(name){const st=tour&&TOUR[tour.i];if(!st||st.wait!==name||tour.done)return;
   if(st.after){tour.done=true;setTimeout(()=>tour&&drawTourCard(),150);}else setTimeout(()=>tour&&tourGo(1),name==='quest'?0:700);}
 function endTour(finished){
-  if(!tour)return;track(finished?'tour_done':'tour_skip');cancelAnimationFrame(tour.frame);tour.shade.remove();tour.card.remove();tour=null;
-  state.tourDone=true;save();if(finished)toast(`Have fun with ${state.cat.name}!`);
+  if(!tour)return;const then=tour.then;track(finished?'tour_done':'tour_skip');cancelAnimationFrame(tour.frame);tour.shade.remove();tour.card.remove();tour=null;
+  state.tourDone=true;save();if(finished)toast(`Have fun with ${state.cat.name}!`);then?.();
 }
 addEventListener('keydown',e=>{if(e.key==='Escape'&&tour)endTour(false);});
 
@@ -1193,7 +1221,7 @@ function showLevel(){
     <p>${500-into} XP to level ${lv+1}.${next?` At level ${next[0]} you become a <b>${next[1]}</b>.`:''}</p>
     <div class="level-ladder">${TITLES.map(([n,t],i)=>{const upTo=TITLES[i+1]?.[0]-1,cur=lv>=n&&!(TITLES[i+1]&&lv>upTo);
       return `<div class="${cur?'current':lv>=n?'done':''}"><span>Lv ${n}${upTo?(upTo>n?`–${upTo}`:''):'+'}</span><b>${t}</b></div>`;}).join('')}</div>
-    <p class="modal-sub">On your topic wheel: ${WHEEL_TIERS.slice(Math.max(0,d-3),d).map(t=>t[0]).join(' · ')}</p>
+    <p class="modal-sub">On your topic wheel: ${wheelTopics()}</p>
     <div class="result-kp"><b>How to earn XP</b><ul><li>Daily quest: 100 XP</li><li>Extra practice: 35 XP</li><li>Bonuses for AI feedback, not rerolling, and scoring 8+</li></ul></div>
     <div class="modal-foot"><button class="modal-later" data-see-progress>All progress</button><button class="modal-ok" data-close>Close</button></div>`,
     sh=>sh.querySelector('[data-see-progress]').onclick=()=>{closeModal();setPanel('progress');});
@@ -1241,7 +1269,9 @@ function backupCheck(){
 // Test helper: skip time ahead to see needs drop. In the console: cqSkip(24); or open the app with #debug.
 window.cqSkip=hours=>{state.cat.lastUpdated-=hours*3600000;if(state.cat.zeroSince)state.cat.zeroSince-=hours*3600000;state=decayCat(state);save();setRoomGraves(state.graves);render();if(!state.cat.alive)showFarewell();};
 
-if(!state.tourDone&&!state.history.length)roomAssetsReady.then(()=>setTimeout(startTour,600),()=>{});
+// The test site and localhost say so, so they're never mistaken for the live app.
+if(TEST_SITE){document.title='Purrsuade (test)';document.body.classList.add('test-site');}
+if(!state.welcomed&&!state.tourDone&&!state.history.length)roomAssetsReady.then(()=>setTimeout(showWelcome,600),()=>{});
 else roomAssetsReady.then(()=>setTimeout(dangerCheck,700),()=>{});
 // Did writing out the words crash this browser last time? Then use keyboard dictation on this device.
 // Did writing out the words crash last time? Closed in the background = iOS tidying up, not a crash.

@@ -25,6 +25,23 @@ with `sam deploy`; `template.yaml` describes the same setup. Resources: Cognito 
 **Update the backend code:** `cd cloud/src && npm ci --omit=dev && zip -qr ../purrsuade-api.zip .`, then
 Lambda → purrsuade-api → Code → Upload from .zip. (Run `npm install` again afterwards if you use the test tools.)
 
+## Test environment
+One live copy and one test copy, so new features can be tried end to end without real players seeing them.
+
+| | Live | Test |
+|---|---|---|
+| Site | https://bhav1509.github.io/Purrsuade/ (repo `Purrsuade`, from `main`) | https://bhav1509.github.io/Purrsuade-test/ (repo `Purrsuade-test`) and `http://localhost:8080` |
+| Backend | `purrsuade-api` and friends (set up by hand, above) | CloudFormation stack `purrsuade-test` (this template) |
+| Publish | `scripts/release.sh` | `scripts/deploy-test.sh` (what's in the folder now, committed or not) |
+| Server code | Upload `purrsuade-api.zip` by hand | `scripts/deploy-test-backend.sh` |
+
+`env.js` decides which copy the app is (`TEST_SITE`); `cloud.js` holds both backends' addresses. Both sites share
+the address bhav1509.github.io, so the test site keeps its saved data under `test-…` names and shows a TEST label.
+The test backend has its own users (email sign-in only, no Google), progress and usage numbers.
+
+Order for a change: build → `deploy-test.sh` (and `deploy-test-backend.sh` if the server changed) → check on the
+phone → upload the zip to the live Lambda if the server changed → `release.sh`.
+
 ## Deploy with SAM (alternative)
 
 1. **AWS credentials.** Purrsuade has its own project (its own AWS account) on the free plan, locked to

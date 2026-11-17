@@ -3,3 +3,6 @@ node_modules/
 .aws-sam/
 samconfig.toml
 cloud/*.zip
+
+# My private plan (goals, personal examples); kept on this computer only
+ROADMAP.md
